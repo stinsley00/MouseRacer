@@ -107,4 +107,4 @@ This attaches native Rust binaries (Linux, macOS, Windows) and the Java JAR to a
 
 ## License
 
-See repository for license details.
+This project is licensed under the [MIT License](LICENSE).
