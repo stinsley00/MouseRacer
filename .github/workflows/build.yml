@@ -96,7 +96,7 @@ jobs:
         working-directory: java
         run: |
           mkdir -p out
-          javac -d out src/mouseracer/*.java
+          javac -encoding UTF-8 -d out src/mouseracer/*.java
 
       - name: Copy resources
         working-directory: java
