@@ -1,0 +1,19 @@
+# Java
+java/out/
+*.class
+
+# Rust
+rust/target/
+
+# IDE
+.idea/
+*.iml
+
+# Claude
+.claude/
+rust/.claude
+java/.claude
+# OS
+.DS_Store
+Thumbs.db
+

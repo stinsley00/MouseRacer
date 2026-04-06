@@ -1,0 +1,149 @@
+name: Build Mouse Racer
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  # ============================================================
+  #  RUST BUILD — native executables per platform
+  # ============================================================
+  build-rust:
+    name: Rust – ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: mouse-racer-linux
+            binary: mouse-racer
+          - os: macos-latest
+            artifact: mouse-racer-macos
+            binary: mouse-racer
+          - os: windows-latest
+            artifact: mouse-racer-windows
+            binary: mouse-racer.exe
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry & build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxkbcommon-dev \
+            libssl-dev
+
+      - name: Build (release)
+        working-directory: rust
+        run: cargo build --release
+
+      - name: Run tests
+        working-directory: rust
+        run: cargo test --release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: rust/target/release/${{ matrix.binary }}
+
+  # ============================================================
+  #  JAVA BUILD — cross-platform JAR
+  # ============================================================
+  build-java:
+    name: Java – ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Compile
+        working-directory: java
+        run: |
+          mkdir -p out
+          javac -d out src/mouseracer/*.java
+
+      - name: Copy resources
+        working-directory: java
+        shell: bash
+        run: |
+          mkdir -p out/mouseracer/resources
+          cp -r src/mouseracer/resources/* out/mouseracer/resources/
+
+      - name: Run tests
+        working-directory: java
+        run: java -cp out mouseracer.TestRunner
+
+      - name: Package JAR
+        working-directory: java
+        shell: bash
+        run: |
+          echo "Main-Class: mouseracer.MouseRacerApp" > manifest.txt
+          jar cfm MouseRacer.jar manifest.txt -C out .
+
+      - name: Upload JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mouse-racer-java-${{ matrix.os }}
+          path: java/MouseRacer.jar
+
+  # ============================================================
+  #  RELEASE — attach binaries to a GitHub Release on tag push
+  # ============================================================
+  release:
+    name: Create Release
+    needs: [build-rust, build-java]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/mouse-racer-linux/mouse-racer
+            artifacts/mouse-racer-macos/mouse-racer
+            artifacts/mouse-racer-windows/mouse-racer.exe
+            artifacts/mouse-racer-java-ubuntu-latest/MouseRacer.jar
